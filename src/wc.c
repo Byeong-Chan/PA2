@@ -5,7 +5,7 @@
 
 #include <sys/queue.h>
 
-static LIST_HEAD(listhead, entry) head;
+static LIST_HEAD(listhead, entry) head[100019];
 
 struct listhead *headp = NULL;
 int num_entries = 0;
@@ -15,6 +15,134 @@ struct entry {
 	int frequency;
 	LIST_ENTRY(entry) entries;
 };
+
+int hash(char *k) {
+  int val = 0;
+  while(*k != '\0') {
+    val = ((val << 8) + val + *k) % 100019;
+    k++;
+  }
+  return val;
+}
+
+struct entry **heap[32768];
+int heap_size[32768];
+int heap_capacity[32768];
+
+void push_heap(struct entry *in, int num) {
+  if(heap_capacity[num] == 0) {
+    heap[num] = (struct entry **)malloc(1 * sizeof(struct entry *));
+    heap_capacity[num] = 1;
+  }
+  if(heap_capacity[num] == heap_size[num]) {
+    heap_capacity[num] <<= 1;
+    struct entry **s = (struct entry **)malloc(heap_capacity[num] * sizeof(struct entry *));
+    for(int i = 0; i < heap_size[num]; i++) s[i] = heap[num][i];
+    free(heap[num]);
+    heap[num] = s;
+  }
+  int cur = heap_size[num]++;
+  heap[num][cur] = in;
+  while(cur > 0) {
+    int par = (cur + 1) / 2 - 1;
+    if(heap[num][par]->frequency < heap[num][cur]->frequency) {
+      struct entry *swp = heap[num][par];
+      heap[num][par] = heap[num][cur];
+      heap[num][cur] = swp; 
+    }
+    else if(heap[num][par]->frequency == heap[num][cur]->frequency && strcmp(heap[num][par]->name, heap[num][cur]->name) > 0) {
+      struct entry *swp = heap[num][par];
+      heap[num][par] = heap[num][cur];
+      heap[num][cur] = swp; 
+    }
+    else break;
+
+    cur = par;
+  }
+}
+
+struct entry *pop_heap(int num) {
+  struct entry *tmp = heap[num][0];
+  int cur = --heap_size[num];
+  heap[num][0] = heap[num][cur];
+  heap[num][cur] = NULL;
+  cur = 0;
+  while(1) {
+    int l = (cur + 1) * 2 - 1;
+    int r = l + 1;
+    if(l >= heap_size[num]) break;
+    if(r >= heap_size[num]) {
+      if(heap[num][l]->frequency > heap[num][cur]->frequency) {
+        struct entry *swp = heap[num][l];
+        heap[num][l] = heap[num][cur];
+        heap[num][cur] = swp;
+        
+        cur = l;
+      }
+      else if(heap[num][l]->frequency == heap[num][cur]->frequency && strcmp(heap[num][l]->name, heap[num][cur]->name) < 0) {
+        struct entry *swp = heap[num][l];
+        heap[num][l] = heap[num][cur];
+        heap[num][cur] = swp;
+        
+        cur = l;
+      }
+      else break;
+      continue;
+    }
+    if(heap[num][l]->frequency > heap[num][r]->frequency) {
+      if(heap[num][l]->frequency > heap[num][cur]->frequency) {
+        struct entry *swp = heap[num][l];
+        heap[num][l] = heap[num][cur];
+        heap[num][cur] = swp;
+        
+        cur = l;
+      }
+      else if(heap[num][l]->frequency == heap[num][cur]->frequency && strcmp(heap[num][l]->name, heap[num][cur]->name) < 0) {
+        struct entry *swp = heap[num][l];
+        heap[num][l] = heap[num][cur];
+        heap[num][cur] = swp;
+        
+        cur = l;
+      }
+      else break;
+    }
+    else if(heap[num][l]->frequency == heap[num][r]->frequency && strcmp(heap[num][l]->name, heap[num][r]->name) < 0) {
+      if(heap[num][l]->frequency > heap[num][cur]->frequency) {
+        struct entry *swp = heap[num][l];
+        heap[num][l] = heap[num][cur];
+        heap[num][cur] = swp;
+        
+        cur = l;
+      }
+      else if(heap[num][l]->frequency == heap[num][cur]->frequency && strcmp(heap[num][l]->name, heap[num][cur]->name) < 0) {
+        struct entry *swp = heap[num][l];
+        heap[num][l] = heap[num][cur];
+        heap[num][cur] = swp;
+        
+        cur = l;
+      }
+      else break;
+    }
+    else {
+      if(heap[num][r]->frequency > heap[num][cur]->frequency) {
+        struct entry *swp = heap[num][r];
+        heap[num][r] = heap[num][cur];
+        heap[num][cur] = swp;
+        
+        cur = r;
+      }
+      else if(heap[num][r]->frequency == heap[num][cur]->frequency && strcmp(heap[num][r]->name, heap[num][cur]->name) < 0) {
+        struct entry *swp = heap[num][r];
+        heap[num][r] = heap[num][cur];
+        heap[num][cur] = swp;
+        
+        cur = r;
+      }
+      else break;
+    }
+  }
+  return tmp;
+}
 
 int main(int argc, char** argv)
 {
@@ -26,7 +154,9 @@ int main(int argc, char** argv)
 	FILE* fp = fopen(argv[1], "r");
 	char buf[4096];
 
-	LIST_INIT(&head);
+  for(int i = 0; i < 100019; i++) {
+  	LIST_INIT(&head[i]);
+  }
 
 	while (fgets(buf, 4096, fp)) {
 		// Preprocess: change all non-alnums into white-space,
@@ -50,104 +180,51 @@ int main(int argc, char** argv)
 		}
 
 		do {
-      if (num_entries == 0) {
-        struct entry* e = malloc(sizeof(struct entry));
-
-        strncpy(e->name, tok, strlen(tok));
-        e->frequency = 1;
-
-        LIST_INSERT_HEAD(&head, e, entries);
-        num_entries++;
-        continue;
-      } else if (num_entries == 1) {
-        int cmp = strcmp(tok, head.lh_first->name);
-
-        if (cmp == 0) {
-          head.lh_first->frequency++;
-        } else if (cmp > 0) {
-          struct entry* e = malloc(sizeof(struct entry));
-
-          strncpy(e->name, tok, strlen(tok));
-          e->frequency = 1;
-
-
-          LIST_INSERT_AFTER(head.lh_first, e, entries);
-          num_entries++;
-        } else if (cmp < 0) {
-          struct entry* e = malloc(sizeof(struct entry));
-
-          strncpy(e->name, tok, strlen(tok));
-          e->frequency = 1;
-
-          LIST_INSERT_HEAD(&head, e, entries);
-          num_entries++;
-        }
-
-        continue;
-      }
-
-      // Reduce: actual word-counting
-      struct entry* np = head.lh_first;
-      struct entry* final_np = NULL;
-
-      int last_cmp = strcmp(tok, np->name);
-
-      if (last_cmp < 0) {
-        struct entry* e = malloc(sizeof(struct entry));
-
-        strncpy(e->name, tok, strlen(tok));
-        e->frequency = 1;
-
-        LIST_INSERT_HEAD(&head, e, entries);
-        num_entries++;
-
-        continue;
-
-      } else if (last_cmp == 0) {
-        np->frequency++;
-
-        continue;
-      }
-
-      for (np = np->entries.le_next; np != NULL; np = np->entries.le_next) {
-        int cmp = strcmp(tok, np->name);
-
-        if (cmp == 0) {
+      int cur = hash(tok);
+      int flag = 0;
+      for(struct entry *np = head[cur].lh_first; np != NULL; np = np->entries.le_next) {
+        if(strcmp(np->name, tok) == 0) {
           np->frequency++;
+          flag = 1;
           break;
-        } else if (last_cmp * cmp < 0) { // sign-crossing occurred
-          struct entry* e = malloc(sizeof(struct entry));
-
-          strncpy(e->name, tok, strlen(tok));
-          e->frequency = 1;
-
-          LIST_INSERT_BEFORE(np, e, entries);
-          num_entries++;
-
-          break;
-        }
-
-        if (np->entries.le_next == NULL) {
-          final_np = np;
-        } else {
-          last_cmp = cmp;
         }
       }
+      if(!flag) {
+          struct entry* e = malloc(sizeof(struct entry));
 
-      if (!np && final_np) {
-        struct entry* e = malloc(sizeof(struct entry));
+          strcpy(e->name, tok);
+          e->frequency = 1;
 
-        strncpy(e->name, tok, strlen(tok));
-        e->frequency = 1;
-
-        LIST_INSERT_AFTER(final_np, e, entries);
-        num_entries++;
+          LIST_INSERT_HEAD(&head[cur], e, entries);
       }
     } while (tok = strtok(NULL, WHITE_SPACE));
   }
 
+  for(int i = 0; i < 100019; i++) {
+      for(struct entry *np = head[i].lh_first; np != NULL; np = np->entries.le_next) {
+        int x = np->frequency;
+        int d[3] = { 0, 0, 0, };
+        int len = 0;
+        while(x) {
+          d[2] = d[1];
+          d[1] = d[0];
+          d[0] = x % 10;
+          x /= 10;
+          len++;
+        }
+        push_heap(np, len * 1000 + d[0] * 100 + d[1] * 10 + d[2]);
+      }
+  }
+
+  for(int i = 32767; i >= 0; i--) {
+    while(heap_size[i] > 0) {
+      struct entry *np = pop_heap(i);
+      printf("%s %d\n", np->name, np->frequency);
+    }
+  }
+
   // Print the counting result very very slow way.
-  int max_frequency = 0;
+  /*int max_frequency = 0;
 
   for (struct entry* np = head.lh_first; np != NULL; np = np->entries.le_next) {
     if (max_frequency < np->frequency) {
@@ -161,11 +238,17 @@ int main(int argc, char** argv)
         printf("%s %d\n", np->name, np->frequency);
       }
     }
-  }
+  }*/
 
   // Release
-  while (head.lh_first != NULL) {
-    LIST_REMOVE(head.lh_first, entries);
+  for(int i = 0; i < 100019; i++) {
+    while (head[i].lh_first != NULL) {
+      LIST_REMOVE(head[i].lh_first, entries);
+    }
+  }
+  for(int i = 0; i < 32768; i++) {
+    if(heap_capacity[i] == 0) continue;
+    free(heap[i]);
   }
 
   fclose(fp);
