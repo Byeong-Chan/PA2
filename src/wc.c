@@ -9,8 +9,8 @@
 
 static LIST_HEAD(listhead, entry) head[100019];
 
-int check_tid[100019];
-pthread_t hash_tid[100019];
+int check_tid[11];
+pthread_t hash_tid[11];
 
 struct listhead *headp = NULL;
 int num_entries = 0;
@@ -164,6 +164,7 @@ void *thread_hash(void *arg) {
   if(!flag) {
     LIST_INSERT_HEAD(&head[cur], p, entries);
   }
+  return NULL;
 }
 
 int main(int argc, char** argv)
@@ -208,16 +209,21 @@ int main(int argc, char** argv)
       strcpy(e->name, tok);
       e->frequency = 1;
 
-      if(check_tid[cur] == 1)
-        pthread_join(hash_tid[cur], NULL);
-      check_tid[cur] = 1;
-      pthread_create(&hash_tid[cur], NULL, thread_hash, (void *)e);
+      int allo = cur / 12502;
+      if(check_tid[allo] == 1) {
+        void *sh;
+        pthread_join(hash_tid[allo], &sh);
+      }
+      check_tid[allo] = 1;
+      pthread_create(&hash_tid[allo], NULL, thread_hash, (void *)e);
     } while (tok = strtok(NULL, WHITE_SPACE));
   }
 
   for(int i = 0; i < 100019; i++) {
-    if(check_tid[i] == 1) 
-      pthread_join(hash_tid[i], NULL);
+    if(check_tid[i / 12502] == 1) {
+      void *sh;
+      pthread_join(hash_tid[i / 12502], NULL);
+    }
     for(struct entry *np = head[i].lh_first; np != NULL; np = np->entries.le_next) {
         int x = np->frequency;
         int d[3] = { 0, 0, 0, };
