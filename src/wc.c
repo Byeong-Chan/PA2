@@ -164,7 +164,6 @@ void *thread_hash(void *arg) {
   if(!flag) {
     LIST_INSERT_HEAD(&head[cur], p, entries);
   }
-  return (void *)NULL;
 }
 
 int main(int argc, char** argv)
@@ -209,20 +208,16 @@ int main(int argc, char** argv)
       strcpy(e->name, tok);
       e->frequency = 1;
 
-      if(check_tid[cur] == 1) {
-        void *sh;
-        pthread_join(hash_tid[cur], sh);
-      }
+      if(check_tid[cur] == 1)
+        pthread_join(hash_tid[cur], NULL);
       check_tid[cur] = 1;
       pthread_create(&hash_tid[cur], NULL, thread_hash, (void *)e);
     } while (tok = strtok(NULL, WHITE_SPACE));
   }
 
   for(int i = 0; i < 100019; i++) {
-    if(check_tid[i] == 1) {
-      void *sh;
-      pthread_join(hash_tid[i], sh);
-    }
+    if(check_tid[i] == 1) 
+      pthread_join(hash_tid[i], NULL);
     for(struct entry *np = head[i].lh_first; np != NULL; np = np->entries.le_next) {
         int x = np->frequency;
         int d[3] = { 0, 0, 0, };
