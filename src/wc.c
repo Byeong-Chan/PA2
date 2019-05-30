@@ -222,7 +222,7 @@ int main(int argc, char** argv)
   for(int i = 0; i < 100019; i++) {
     if(check_tid[i / 12502] == 1) {
       void *sh;
-      pthread_join(hash_tid[i / 12502], NULL);
+      pthread_join(hash_tid[i / 12502], sh);
     }
     for(struct entry *np = head[i].lh_first; np != NULL; np = np->entries.le_next) {
         int x = np->frequency;
