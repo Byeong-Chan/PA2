@@ -2,10 +2,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <unistd.h>
+#include <pthread.h>
 
 #include <sys/queue.h>
 
 static LIST_HEAD(listhead, entry) head[100019];
+
+int check_tid[100019];
+pthread_t hash_tid[100019];
 
 struct listhead *headp = NULL;
 int num_entries = 0;
@@ -144,6 +149,24 @@ struct entry *pop_heap(int num) {
   return tmp;
 }
 
+void *thread_hash(void *arg) {
+  struct entry *p = (struct entry *)arg;
+  int cur = hash(p->name);
+
+  int flag = 0;
+  for(struct entry *np = head[cur].lh_first; np != NULL; np = np->entries.le_next) {
+    if(strcmp(np->name, p->name) == 0) {
+      np->frequency++;
+      flag = 1;
+      break;
+    }
+  }
+  if(!flag) {
+    LIST_INSERT_HEAD(&head[cur], p, entries);
+  }
+  return (void *)NULL;
+}
+
 int main(int argc, char** argv)
 {
 	if (argc != 2) {
@@ -180,28 +203,27 @@ int main(int argc, char** argv)
 		}
 
 		do {
+      struct entry* e = malloc(sizeof(struct entry));
+
       int cur = hash(tok);
-      int flag = 0;
-      for(struct entry *np = head[cur].lh_first; np != NULL; np = np->entries.le_next) {
-        if(strcmp(np->name, tok) == 0) {
-          np->frequency++;
-          flag = 1;
-          break;
-        }
-      }
-      if(!flag) {
-          struct entry* e = malloc(sizeof(struct entry));
+      strcpy(e->name, tok);
+      e->frequency = 1;
 
-          strcpy(e->name, tok);
-          e->frequency = 1;
-
-          LIST_INSERT_HEAD(&head[cur], e, entries);
+      if(check_tid[cur] == 1) {
+        void *sh;
+        pthread_join(hash_tid[cur], sh);
       }
+      check_tid[cur] = 1;
+      pthread_create(&hash_tid[cur], NULL, thread_hash, (void *)e);
     } while (tok = strtok(NULL, WHITE_SPACE));
   }
 
   for(int i = 0; i < 100019; i++) {
-      for(struct entry *np = head[i].lh_first; np != NULL; np = np->entries.le_next) {
+    if(check_tid[i] == 1) {
+      void *sh;
+      pthread_join(hash_tid[i], sh);
+    }
+    for(struct entry *np = head[i].lh_first; np != NULL; np = np->entries.le_next) {
         int x = np->frequency;
         int d[3] = { 0, 0, 0, };
         int len = 0;
