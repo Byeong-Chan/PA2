@@ -7,15 +7,13 @@
 
 #include <sys/queue.h>
 
-static LIST_HEAD(listhead, entry) head[100019], sub[43];
-
-pthread_t hash_tid[43];
+static LIST_HEAD(listhead, entry) head[5000011];
 
 struct listhead *headp = NULL;
 int num_entries = 0;
 
 struct entry {
-	char name[BUFSIZ];
+	char* name;
 	int frequency;
 	LIST_ENTRY(entry) entries;
 };
@@ -23,7 +21,7 @@ struct entry {
 int hash(char *k) {
   int val = 0;
   while(*k != '\0') {
-    val = ((val << 8) + val + *k) % 100019;
+    val = ((val << 8) + val + *k) % 5000011;
     k++;
   }
   return val;
@@ -148,33 +146,6 @@ struct entry *pop_heap(int num) {
   return tmp;
 }
 
-void *thread_hash(void *arg) {
-  int *p = (int *)arg;
-  while (sub[*p].lh_first != NULL) {
-    struct entry *np = sub[*p].lh_first;
-    int cur = hash(np->name);
-    int flag = 0;
-    for(struct entry *tp = head[cur].lh_first; tp != NULL; tp = tp->entries.le_next) {
-     if(strcmp(np->name, tp->name) == 0) {
-        tp->frequency++;
-        flag = 1;
-        break;
-      }
-    }
-    if(!flag) {
-      struct entry* e = malloc(sizeof(struct entry));
-
-      strcpy(e->name, np->name);
-      e->frequency = 1;
-
-      LIST_INSERT_HEAD(&head[cur], e, entries);
-    }
-    LIST_REMOVE(np, entries);
-    free(np);
-  }
-  return NULL;
-}
-
 int main(int argc, char** argv)
 {
 	if (argc != 2) {
@@ -185,16 +156,10 @@ int main(int argc, char** argv)
 	FILE* fp = fopen(argv[1], "r");
 	char buf[4096];
 
-  for(int i = 0; i < 100019; i++) {
+  for(int i = 0; i < 5000011; i++) {
   	LIST_INIT(&head[i]);
   }
-  int idw[43];
-  for(int i = 0; i < 43; i++) {
-    idw[i] = i;
-    LIST_INIT(&sub[i]);
-  }
 
-  int count = 0;
 	while (fgets(buf, 4096, fp)) {
 		// Preprocess: change all non-alnums into white-space,
 		//             alnums to lower-case.
@@ -217,38 +182,43 @@ int main(int argc, char** argv)
 		}
 
 		do {
-      struct entry* e = malloc(sizeof(struct entry));
-
       int cur = hash(tok);
-      strcpy(e->name, tok);
-      e->frequency = 1;
-
-      count++;
-      if(count > 1000000) {
-        count = 0;
-
-        for(int i = 0; i < 43; i++) {
-          pthread_create(&hash_tid[i], NULL, thread_hash, &(idw[i]));
+      int flag = 0;
+      struct entry *last = NULL;
+      for(struct entry *np = head[cur].lh_first; np != NULL; np = np->entries.le_next) {
+        last = np;
+        int judge = strcmp(np->name, tok);
+        if(judge == 0) {
+          np->frequency++;
+          flag = 1;
+          break;
         }
-        for(int i = 0; i < 43; i++) {
-          void *sh;
-          pthread_join(hash_tid[i], &sh);
+        else if(judge > 0) {
+          struct entry* e = malloc(sizeof(struct entry));
+
+          e->name = (char *)malloc(sizeof(char) * (strlen(tok) + 1));
+          strcpy(e->name, tok);
+          e->frequency = 1;
+
+          LIST_INSERT_BEFORE(np, e, entries);
+          flag = 1;
+          break;
         }
       }
+      if(!flag) {
+        struct entry* e = malloc(sizeof(struct entry));
+        
+        e->name = (char *)malloc(sizeof(char) * (strlen(tok) + 1));
+        strcpy(e->name, tok);
+        e->frequency = 1;
 
-      LIST_INSERT_HEAD(&sub[cur / 2500], e, entries);
+        if(last == NULL) LIST_INSERT_HEAD(&head[cur], e, entries);
+        else LIST_INSERT_AFTER(last, e, entries);
+      }
     } while (tok = strtok(NULL, WHITE_SPACE));
   }
 
-  for(int i = 0; i < 43; i++) {
-    pthread_create(&hash_tid[i], NULL, thread_hash, &(idw[i]));
-  }
-  for(int i = 0; i < 43; i++) {
-    void *sh;
-    pthread_join(hash_tid[i], &sh);
-  }
-
-  for(int i = 0; i < 100019; i++) {
+  for(int i = 0; i < 5000011; i++) {
     for(struct entry *np = head[i].lh_first; np != NULL; np = np->entries.le_next) {
         int x = np->frequency;
         int d[3] = { 0, 0, 0, };
@@ -289,9 +259,10 @@ int main(int argc, char** argv)
   }*/
 
   // Release
-  for(int i = 0; i < 100019; i++) {
+  for(int i = 0; i < 5000011; i++) {
     while (head[i].lh_first != NULL) {
       struct entry * np = head[i].lh_first;
+      free(np->name);
       LIST_REMOVE(np, entries);
       free(np);
     }
